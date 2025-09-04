@@ -26,47 +26,91 @@ logger = logging.getLogger(__name__)
 # try at walk function, connection via udp
 # oid input - oid to start walk from
 # community is a security thing ?
-async def snmp_walk(target, community, oid):
+from pysnmp.hlapi.asyncio import *
+from pysnmp.proto import rfc1902
+import asyncio
+
+async def snmp_walk(target, community, start_oid):
+    """
+    SNMP walk -- asynch
+
+    Args:
+        target (str): IP
+        community (str): SNMP community string
+        start_oid (str): Starting OID for the walk
+
+    Returns:
+        list: List of dictionaries containing OID and value pairs
+    """
     results = []
     snmp_engine = SnmpEngine()
 
     try:
+        # Create transport target
+        transport_target = await UdpTransportTarget.create((target, 161))
+
+        # Start with the initial OID
+        current_oid = ObjectIdentity(start_oid)
+
         while True:
             error_indication, error_status, error_index, var_binds = await next_cmd(
                 snmp_engine,
                 CommunityData(community),
-                UdpTransportTarget.create((target, 161)),
+                transport_target,
                 ContextData(),
-                ObjectType(ObjectIdentity(oid))
+                ObjectType(current_oid),
+                lexicographicMode=False,
+                ignoreNonIncreasingOid=False
             )
 
             if error_indication:
-                print(f"Error: {error_indication}")
+                print(f"SNMP Error: {error_indication}")
                 break
             elif error_status:
-                print(f"Error {error_status.prettyPrint()} at {error_index and var_binds[int(error_index) - 1][0] or '?'}")
+                print(f"SNMP Error: {error_status.prettyPrint()} at {error_index and var_binds[int(error_index) - 1][0] or '?'}")
                 break
 
-            # Process valid response
+            # Process response
+            if not var_binds:
+                break
+
             for var_bind in var_binds:
-                current_oid = var_bind[0]
-                # Check if we're still in the same subtree
-                if oid not in str(current_oid):
+                oid_obj, value_obj = var_bind
+                oid_str = str(oid_obj)
+
+                # Check still within the requested subtree
+                if not oid_str.startswith(start_oid):
                     return results
+
+                # Handle different value types
+                if isinstance(value_obj, rfc1902.NoSuchObject):
+                    value_str = "No Such Object"
+                elif isinstance(value_obj, rfc1902.NoSuchInstance):
+                    value_str = "No Such Instance"
+                elif isinstance(value_obj, rfc1902.EndOfMibView):
+                    # End of MIB reached
+                    return results
+                else:
+                    value_str = str(value_obj)
+
                 results.append({
-                    'oid': str(var_bind[0]),
-                    'value': str(var_bind[1])
+                    'oid': oid_str,
+                    'value': value_str,
+                    'type': type(value_obj).__name__
                 })
-                # Update OID for next iteration
-                oid = str(current_oid)
+
+                # Update current OID for next iteration
+                current_oid = ObjectIdentity(oid_str)
 
     except Exception as e:
         print(f"SNMP Walk error: {str(e)}")
         raise
-
     finally:
+        # close the SNMP engine
         if hasattr(snmp_engine, 'transport_dispatcher'):
-            snmp_engine.transport_dispatcher.closeDispatcher()
+            snmp_engine.transport_dispatcher.close_dispatcher()
+        elif hasattr(snmp_engine, 'transport_dispatcher'):
+            snmp_engine.transport_dispatcher.close_dispatcher()
 
     return results
 
