@@ -1,15 +1,10 @@
-import data
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
-from pysnmp.entity.engine import SnmpEngine
-from pysnmp.hlapi import *
-from pysnmp.hlapi.v3arch import next_cmd, CommunityData, UdpTransportTarget, ContextData
-from pysnmp.smi.rfc1902 import ObjectType, ObjectIdentity
-from pysnmp.hlapi.asyncio import *
 import json
 import logging
-import asyncio
 from datetime import datetime
+from pysnmp.hlapi.asyncio import *
+from pysnmp.proto.rfc1905 import NoSuchObject, NoSuchInstance, EndOfMibView
+import asyncio
 
 hostName = "localhost"
 serverPort = 8080
@@ -22,13 +17,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-# try at walk function, connection via udp
-# oid input - oid to start walk from
-# community is a security thing ?
-from pysnmp.hlapi.asyncio import *
-from pysnmp.proto import rfc1902
-import asyncio
 
 async def snmp_walk(target, community, start_oid):
     """
@@ -55,7 +43,7 @@ async def snmp_walk(target, community, start_oid):
         while True:
             error_indication, error_status, error_index, var_binds = await next_cmd(
                 snmp_engine,
-                CommunityData(community),
+                CommunityData(community, mpModel=0), #for snmpwalk v1 use mpModel=0
                 transport_target,
                 ContextData(),
                 ObjectType(current_oid),
@@ -83,11 +71,11 @@ async def snmp_walk(target, community, start_oid):
                     return results
 
                 # Handle different value types
-                if isinstance(value_obj, rfc1902.NoSuchObject):
+                if isinstance(value_obj, NoSuchObject):
                     value_str = "No Such Object"
-                elif isinstance(value_obj, rfc1902.NoSuchInstance):
+                elif isinstance(value_obj, NoSuchInstance):
                     value_str = "No Such Instance"
-                elif isinstance(value_obj, rfc1902.EndOfMibView):
+                elif isinstance(value_obj, EndOfMibView):
                     # End of MIB reached
                     return results
                 else:
@@ -142,7 +130,7 @@ class MyServer(BaseHTTPRequestHandler):
                 # Create event loop and run the async function
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(snmp_walk(ip, "public", "1.3.6.1.2.1"))
+                result = loop.run_until_complete(snmp_walk(ip, "public", "1.3.6.1.2.1.1"))
                 loop.close()
 
                 self.send_response(200)
