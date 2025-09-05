@@ -5,6 +5,7 @@ import './App.css'
 
 function App() {
   const [ip, setIp] = useState("")
+  const [metrics, setMetrics]=useState()
 
 
   async function handleWalk() {
@@ -15,7 +16,9 @@ function App() {
               "Content-type": "application/json"
           },
           body: JSON.stringify({ip})
-      }).then(res=>res.json()).then(data=>console.log(data));
+      }).then(res=>res.json()).then(data=>setMetrics(data));
+      console.log(JSON.stringify(metrics))
+
 
   }
 
@@ -42,6 +45,27 @@ function App() {
                   SNMP WALK
               </button>
           </div>
+          Das wird später im Datei abgelegt
+          {metrics && metrics.status === "success" && (
+          <table>
+            <thead>
+              <tr>
+                <th>OID</th>
+                <th>Value</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.data.map((item, idx) => (
+                <tr key={idx}>
+                  <td>{item.oid}</td>
+                  <td>{item.value}</td>
+                  <td>{item.type}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+            )}
       </>
   )
 }

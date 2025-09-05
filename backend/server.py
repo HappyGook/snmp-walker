@@ -17,6 +17,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def parse_ipaddress(value_str):
+    # 4-Byte-String -> IPv4-Address
+    return '.'.join(str(b if isinstance(b, int) else ord(b)) for b in value_str)
+
 
 async def snmp_walk(target, community, start_oid):
     """
@@ -75,6 +79,8 @@ async def snmp_walk(target, community, start_oid):
                     value_str = value_type
                 elif value_type == "EndOfMibView":
                     return {"status": "success", "data": results}
+                elif value_type == "IpAddress":
+                    value_str = parse_ipaddress(value_obj.asOctets())
                 else:
                     value_str = str(value_obj)
 
@@ -125,7 +131,7 @@ class MyServer(BaseHTTPRequestHandler):
                 # Create event loop and run the async function
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(snmp_walk(ip, "public", "1.3.6.1.2.1.1"))
+                result = loop.run_until_complete(snmp_walk(ip, "public", "1.3.6.1.4.1.41649.2.1.1"))
                 loop.close()
 
                 self.send_response(200)
