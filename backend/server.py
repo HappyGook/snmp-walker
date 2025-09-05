@@ -52,55 +52,50 @@ async def snmp_walk(target, community, start_oid):
             )
 
             if error_indication:
-                print(f"SNMP Error: {error_indication}")
-                break
+                return {"status": "error", "message": str(error_indication)}
+
             elif error_status:
-                print(f"SNMP Error: {error_status.prettyPrint()} at {error_index and var_binds[int(error_index) - 1][0] or '?'}")
-                break
+                return {"status": "error", "message": f"{error_status.prettyPrint()} at {error_index}"}
+
 
             # Process response
             if not var_binds:
                 break
 
-            for var_bind in var_binds:
-                oid_obj, value_obj = var_bind
+            for oid_obj, value_obj in var_binds:
                 oid_str = str(oid_obj)
+                value_type = type(value_obj).__name__
 
                 # Check still within the requested subtree
                 if not oid_str.startswith(start_oid):
-                    return results
+                    return {"status": "success", "data": results}
 
                 # Handle different value types
-                if isinstance(value_obj, NoSuchObject):
-                    value_str = "No Such Object"
-                elif isinstance(value_obj, NoSuchInstance):
-                    value_str = "No Such Instance"
-                elif isinstance(value_obj, EndOfMibView):
-                    # End of MIB reached
-                    return results
+                if value_type in ("NoSuchObject", "NoSuchInstance"):
+                    value_str = value_type
+                elif value_type == "EndOfMibView":
+                    return {"status": "success", "data": results}
                 else:
                     value_str = str(value_obj)
 
                 results.append({
-                    'oid': oid_str,
-                    'value': value_str,
-                    'type': type(value_obj).__name__
+                    "oid": oid_str,
+                    "value": value_str,
+                    "type": value_type
                 })
 
                 # Update current OID for next iteration
                 current_oid = ObjectIdentity(oid_str)
 
     except Exception as e:
-        print(f"SNMP Walk error: {str(e)}")
-        raise
+        return {"status": "error", "message": str(e)}
+
     finally:
         # close the SNMP engine
-        if hasattr(snmp_engine, 'transport_dispatcher'):
-            snmp_engine.transport_dispatcher.close_dispatcher()
-        elif hasattr(snmp_engine, 'transport_dispatcher'):
+        if hasattr(snmp_engine, "transport_dispatcher"):
             snmp_engine.transport_dispatcher.close_dispatcher()
 
-    return results
+    return {"status": "success", "data": results}
 
 # basic server idea
 class MyServer(BaseHTTPRequestHandler):
@@ -138,8 +133,7 @@ class MyServer(BaseHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
 
-                response = {'status': 'success', 'data': result}
-                self.wfile.write(json.dumps(response).encode('utf-8'))
+                self.wfile.write(json.dumps(result).encode('utf-8'))
                 print("SNMP walk completed successfully")
 
             except Exception as e:

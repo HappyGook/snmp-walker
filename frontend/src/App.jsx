@@ -9,15 +9,14 @@ function App() {
 
   async function handleWalk() {
       console.log('Sending walk request');
-      const response = await fetch('/api/walk', {
+      await fetch('/api/walk', {
           method: 'POST',
-          body: JSON.stringify({ip}),
           headers: {
-              'Accept': 'application/json'
-          }
-      });
+              "Content-type": "application/json"
+          },
+          body: JSON.stringify({ip})
+      }).then(res=>res.json()).then(data=>console.log(data));
 
-      console.log('Response status:', response.status);
   }
 
   function handleIP(e) {
